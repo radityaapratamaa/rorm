@@ -2,7 +2,8 @@ package rorm
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type (
@@ -10,8 +11,8 @@ type (
 	RormEngine interface {
 		SetTableOptions(tbCaseFormat, tbPrefix string)
 		SetIsMultiRows(state bool)
-		SetDB(db *sql.DB)
-		GetDB() *sql.DB
+		SetDB(db *sqlx.DB)
+		GetDB() *sqlx.DB
 		GetPreparedValues() []interface{}
 		GetMultiPreparedValues() [][]interface{}
 
