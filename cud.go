@@ -79,7 +79,7 @@ func (re *Engine) PrepareData(ctx context.Context, command string, data interfac
 	return nil
 }
 
-func (re *Engine) BindUpdateCol(col string, otherCols ...string) *Engine {
+func (re *Engine) BindUpdateCol(col string, otherCols ...string) RormEngine {
 	re.updatedCol = make(map[string]bool)
 	re.updatedCol[col] = true
 	if otherCols != nil {

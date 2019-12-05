@@ -29,7 +29,7 @@ func (re *Engine) GetSingleResult() map[string]string {
 	return re.results[0]
 }
 
-func (re *Engine) Select(col ...string) *Engine {
+func (re *Engine) Select(col ...string) RormEngine {
 	re.column += strings.Join(col, ",")
 	return re
 }
@@ -44,36 +44,36 @@ func (re *Engine) aggregateFuncSelect(command, col string, colAlias ...string) {
 	}
 }
 
-func (re *Engine) SelectSum(col string, colAlias ...string) *Engine {
+func (re *Engine) SelectSum(col string, colAlias ...string) RormEngine {
 	re.aggregateFuncSelect("SUM", col, colAlias...)
 	return re
 }
 
-func (re *Engine) SelectAverage(col string, colAlias ...string) *Engine {
+func (re *Engine) SelectAverage(col string, colAlias ...string) RormEngine {
 	re.aggregateFuncSelect("AVG", col, colAlias...)
 
 	return re
 }
 
-func (re *Engine) SelectMax(col string, colAlias ...string) *Engine {
+func (re *Engine) SelectMax(col string, colAlias ...string) RormEngine {
 	re.aggregateFuncSelect("MAX", col, colAlias...)
 
 	return re
 }
 
-func (re *Engine) SelectMin(col string, colAlias ...string) *Engine {
+func (re *Engine) SelectMin(col string, colAlias ...string) RormEngine {
 	re.aggregateFuncSelect("MIN", col, colAlias...)
 
 	return re
 }
 
-func (re *Engine) SelectCount(col string, colAlias ...string) *Engine {
+func (re *Engine) SelectCount(col string, colAlias ...string) RormEngine {
 	re.aggregateFuncSelect("COUNT", col, colAlias...)
 
 	return re
 }
 
-func (re *Engine) SQLRaw(rawQuery string, values ...interface{}) *Engine {
+func (re *Engine) SQLRaw(rawQuery string, values ...interface{}) RormEngine {
 	re.isRaw = true
 	re.rawQuery = rawQuery
 	re.rawQuery = re.adjustPreparedParam(re.rawQuery)
@@ -81,22 +81,22 @@ func (re *Engine) SQLRaw(rawQuery string, values ...interface{}) *Engine {
 	return re
 }
 
-func (re *Engine) From(tableName string) *Engine {
+func (re *Engine) From(tableName string) RormEngine {
 	re.tableName = tableName
 	return re
 }
 
-func (re *Engine) Join(tabel, on string) *Engine {
+func (re *Engine) Join(tabel, on string) RormEngine {
 	re.join += " JOIN " + tabel + " ON " + on
 	return re
 }
 
-func (re *Engine) GroupBy(col ...string) *Engine {
+func (re *Engine) GroupBy(col ...string) RormEngine {
 	re.groupBy += strings.Join(col, ",")
 	return re
 }
 
-func (re *Engine) Where(col string, value interface{}, opt ...string) *Engine {
+func (re *Engine) Where(col string, value interface{}, opt ...string) RormEngine {
 	if opt != nil {
 		re.generateCondition(col, value, opt[0], true)
 	} else {
@@ -105,7 +105,7 @@ func (re *Engine) Where(col string, value interface{}, opt ...string) *Engine {
 	return re
 }
 
-func (re *Engine) WhereRaw(args string, value ...interface{}) *Engine {
+func (re *Engine) WhereRaw(args string, value ...interface{}) RormEngine {
 	if re.condition != "" {
 		re.condition += " AND "
 	}
@@ -114,13 +114,13 @@ func (re *Engine) WhereRaw(args string, value ...interface{}) *Engine {
 	return re
 }
 
-func (re *Engine) WhereIn(col string, listOfValues ...interface{}) *Engine {
+func (re *Engine) WhereIn(col string, listOfValues ...interface{}) RormEngine {
 	value := re.generateInValue(listOfValues...)
 	re.generateCondition(col, value, "IN", true)
 	return re
 }
 
-func (re *Engine) WhereNotIn(col string, listOfValues ...interface{}) *Engine {
+func (re *Engine) WhereNotIn(col string, listOfValues ...interface{}) RormEngine {
 	value := re.generateInValue(listOfValues...)
 	re.generateCondition(col, value, "NOT IN", true)
 	return re
@@ -199,21 +199,21 @@ func (re *Engine) generateInValue(listValues ...interface{}) string {
 	return value
 }
 
-func (re *Engine) OrIn(col string, listOfValues ...interface{}) *Engine {
+func (re *Engine) OrIn(col string, listOfValues ...interface{}) RormEngine {
 	value := re.generateInValue(listOfValues...)
 	re.generateCondition(col, value, "IN", false)
 	return re
 }
-func (re *Engine) OrNotIn(col string, listOfValues ...interface{}) *Engine {
+func (re *Engine) OrNotIn(col string, listOfValues ...interface{}) RormEngine {
 	value := re.generateInValue(listOfValues...)
 	re.generateCondition(col, value, "NOT IN", false)
 	return re
 }
-func (re *Engine) WhereLike(col, value string) *Engine {
+func (re *Engine) WhereLike(col, value string) RormEngine {
 	re.generateCondition(col, value, "LIKE", true)
 	return re
 }
-func (re *Engine) OrLike(col, value string) *Engine {
+func (re *Engine) OrLike(col, value string) RormEngine {
 	re.generateCondition(col, value, "LIKE", false)
 	return re
 }
@@ -251,7 +251,7 @@ func (re *Engine) generateCondition(col string, nValue interface{}, opt string, 
 	}
 }
 
-func (re *Engine) Or(col string, value interface{}, opt ...string) *Engine {
+func (re *Engine) Or(col string, value interface{}, opt ...string) RormEngine {
 	if opt != nil {
 		re.generateCondition(col, value, opt[0], false)
 	} else {
@@ -265,7 +265,7 @@ func (re *Engine) Having() {
 	// coming soon
 }
 
-func (re *Engine) OrderBy(col, value string) *Engine {
+func (re *Engine) OrderBy(col, value string) RormEngine {
 	if re.orderBy != "" {
 		re.orderBy += ", "
 	}
@@ -273,7 +273,7 @@ func (re *Engine) OrderBy(col, value string) *Engine {
 	return re
 }
 
-func (re *Engine) Asc(col string) *Engine {
+func (re *Engine) Asc(col string) RormEngine {
 	if re.orderBy != "" {
 		re.orderBy += ", "
 	}
@@ -281,7 +281,7 @@ func (re *Engine) Asc(col string) *Engine {
 	return re
 }
 
-func (re *Engine) Desc(col string) *Engine {
+func (re *Engine) Desc(col string) RormEngine {
 	if re.orderBy != "" {
 		re.orderBy += ", "
 	}
@@ -289,7 +289,7 @@ func (re *Engine) Desc(col string) *Engine {
 	return re
 }
 
-func (re *Engine) Limit(limit int, offset ...int) *Engine {
+func (re *Engine) Limit(limit int, offset ...int) RormEngine {
 	if offset != nil {
 		re.limit = strconv.Itoa(offset[0]) + ", "
 	}
