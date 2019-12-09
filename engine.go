@@ -62,6 +62,7 @@ func New(cfg *DbConfig) (*Engine, error) {
 	}
 	// set default for table case format
 	re.options.tbFormat = "snake"
+	re.options.colFormat = "snake"
 	re.syntaxQuote = "`"
 	if cfg.Driver != "mysql" {
 		re.syntaxQuote = "\""
@@ -79,9 +80,10 @@ func generateConnectionString(cfg *DbConfig) (connectionString string, err error
 		return
 	}
 	dbURL := &url.URL{
-		Scheme: cfg.Driver,
-		User:   url.UserPassword(cfg.Username, cfg.Password),
-		Host:   cfg.Host,
+		Scheme:   cfg.Driver,
+		User:     url.UserPassword(cfg.Username, cfg.Password),
+		Host:     cfg.Host,
+		RawQuery: cfg.Options,
 	}
 
 	query := url.Values{}
@@ -106,6 +108,7 @@ func generateConnectionString(cfg *DbConfig) (connectionString string, err error
 			dbURL.Host = cfg.Host + ":" + cfg.Port
 		}
 		replacedStr := "@" + cfg.Protocol + "($1:$2)/"
+
 		rgx := regexp.MustCompile(`@([a-zA-Z0-9]+):([0-9]+)/`)
 		res := rgx.ReplaceAllString(dbURL.String(), replacedStr)
 		res = res[8:]
@@ -140,18 +143,10 @@ func (re *Engine) extractTableName(data interface{}) reflect.Value {
 				sdValue = sdValue.Elem()
 			}
 			for x := 0; x < sdValue.NumField(); x++ {
-				fieldType := sdValue.Type().Field(x)
-				// nameFiled := fieldType.Name
-				tagField := fieldType.Tag
-				if re.updatedCol != nil {
-					if _, exist := re.updatedCol[tagField.Get("db")]; !exist {
-						continue
-					}
-				}
-				field := sdValue.Field(x)
-				if !re.checkStructTag(tagField, field) {
+				if _, valid := re.getAndValidateTag(sdValue, x); !valid {
 					continue
 				}
+				field := sdValue.Field(x)
 				re.preparedValue = append(re.preparedValue, field.Interface())
 			}
 			re.multiPreparedValue = append(re.multiPreparedValue, re.preparedValue)
@@ -185,19 +180,6 @@ func (re *Engine) Connect(dbDriver, connectionURL string) error {
 	return err
 }
 
-func (re *Engine) checkStructTag(tagField reflect.StructTag, fieldVal reflect.Value) bool {
-	sql := strings.Split(tagField.Get("sql"), ",")[0]
-	switch sql {
-	case "pk":
-		return false
-	case "date":
-		if fieldVal.String() == "" {
-			return false
-		}
-	}
-	return true
-}
-
 func (re *Engine) clearField() {
 	re.condition = ""
 	re.column = ""
@@ -218,6 +200,49 @@ func (re *Engine) clearField() {
 	}
 }
 
+func (re *Engine) getAndValidateTag(field reflect.Value, keyIndex int) (string, bool) {
+
+	fieldType := field.Type().Field(keyIndex)
+	if fieldType.Type.Kind() == reflect.Ptr && field.Field(keyIndex).IsNil() {
+		return "", false
+	}
+	fieldValue := field.Field(keyIndex)
+	colNameTag := ""
+	var valid bool
+	if colNameTag, valid = re.checkStructTag(fieldType.Tag, fieldValue); !valid {
+
+		return "", false
+	}
+	if colNameTag == "" {
+		colNameTag = fieldType.Name
+		if re.options.colFormat == "snake" {
+			colNameTag = lib.CamelToSnakeCase(colNameTag)
+		}
+
+	}
+	return colNameTag, true
+}
+
+func (re *Engine) checkStructTag(tagField reflect.StructTag, fieldVal reflect.Value) (string, bool) {
+	colName := ""
+	if tagField.Get("db") == "" {
+		return colName, true
+	}
+	colName = strings.Split(tagField.Get("db"), " ")[0]
+	identifierTagArr := strings.Split(tagField.Get("rorm"), " ")
+	for _, val := range identifierTagArr {
+		switch val {
+		case "pk", "ai":
+			return colName, false
+		case "date":
+			if fieldVal.String() == "" {
+				return colName, false
+			}
+		}
+	}
+	return colName, true
+}
+
 func (re *Engine) StartBulkOptimized() {
 	re.bulkOptimized = true
 	re.bulkCounter = 0
@@ -230,6 +255,10 @@ func (re *Engine) StopBulkOptimized() {
 func (re *Engine) SetTableOptions(tbCaseFormat, tbPrefix string) {
 	re.options.tbFormat = tbCaseFormat
 	re.options.tbPrefix = tbPrefix
+}
+
+func (re *Engine) SetColumnOptions(columnFormat, columnPrefix string) {
+	re.options.colFormat = columnFormat
 }
 
 func (re *Engine) adjustPreparedParam(old string) string {

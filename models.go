@@ -24,6 +24,7 @@ type (
 		DbScheme string
 		Driver   string
 		Protocol string
+		Options  string
 		// DbInstance - for SQL Server
 		DbInstance string
 	}

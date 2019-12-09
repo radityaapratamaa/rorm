@@ -10,6 +10,8 @@ type (
 	// RormEngine - Engine of Raw Query ORM Library
 	RormEngine interface {
 		SetTableOptions(tbCaseFormat, tbPrefix string)
+		SetColumnOptions(columnFormat, columnPrefix string)
+		Cols(col string, otherCols ...string) RormEngine
 		SetIsMultiRows(state bool)
 		SetDB(db *sqlx.DB)
 		GetDB() *sqlx.DB
@@ -59,9 +61,9 @@ type (
 		SQLRaw(rawQuery string, values ...interface{}) RormEngine
 		Get(pointerStruct interface{}) error
 
-		Insert(data interface{}) error
-		Update(data interface{}) error
-		Delete(data interface{}) error
+		Insert(data interface{}) (int64, error)
+		Update(data interface{}) (int64, error)
+		Delete(data interface{}) (int64, error)
 	}
 	// RormTransaction - Transaction Structure
 	RormTransaction struct {
