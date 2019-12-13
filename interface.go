@@ -2,16 +2,19 @@ package rorm
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/jmoiron/sqlx"
 )
 
 type (
 	// RormEngine - Engine of Raw Query ORM Library
 	RormEngine interface {
 		SetTableOptions(tbCaseFormat, tbPrefix string)
+		SetColumnOptions(columnFormat, columnPrefix string)
+		Cols(col string, otherCols ...string) RormEngine
 		SetIsMultiRows(state bool)
-		SetDB(db *sql.DB)
-		GetDB() *sql.DB
+		SetDB(db *sqlx.DB)
+		GetDB() *sqlx.DB
 		GetPreparedValues() []interface{}
 		GetMultiPreparedValues() [][]interface{}
 
@@ -25,42 +28,42 @@ type (
 		// GetResults() []map[string]string
 		// GetSingleResult() map[string]string
 
-		Select(col ...string) *Engine
-		SelectSum(col string, colAlias ...string) *Engine
-		SelectAverage(col string, colAlias ...string) *Engine
-		SelectMax(col string, colAlias ...string) *Engine
-		SelectMin(col string, colAlias ...string) *Engine
-		SelectCount(col string, colAlias ...string) *Engine
+		Select(col ...string) RormEngine
+		SelectSum(col string, colAlias ...string) RormEngine
+		SelectAverage(col string, colAlias ...string) RormEngine
+		SelectMax(col string, colAlias ...string) RormEngine
+		SelectMin(col string, colAlias ...string) RormEngine
+		SelectCount(col string, colAlias ...string) RormEngine
 
-		Where(col string, value interface{}, opt ...string) *Engine
-		WhereRaw(args string, value ...interface{}) *Engine
+		Where(col string, value interface{}, opt ...string) RormEngine
+		WhereRaw(args string, value ...interface{}) RormEngine
 
-		WhereIn(col string, listOfValues ...interface{}) *Engine
-		WhereNotIn(col string, listOfValues ...interface{}) *Engine
-		WhereLike(col, value string) *Engine
+		WhereIn(col string, listOfValues ...interface{}) RormEngine
+		WhereNotIn(col string, listOfValues ...interface{}) RormEngine
+		WhereLike(col, value string) RormEngine
 		WhereBetween(col string, val1, val2 interface{})
 		WhereNotBetween(col string, val1, val2 interface{})
 
-		Or(col string, value interface{}, opt ...string) *Engine
-		OrIn(col string, listOfValues ...interface{}) *Engine
-		OrNotIn(col string, listOfValues ...interface{}) *Engine
-		OrLike(col, value string) *Engine
+		Or(col string, value interface{}, opt ...string) RormEngine
+		OrIn(col string, listOfValues ...interface{}) RormEngine
+		OrNotIn(col string, listOfValues ...interface{}) RormEngine
+		OrLike(col, value string) RormEngine
 		OrBetween(col string, val1, val2 interface{})
 		OrNotBetween(col string, val1, val2 interface{})
 
-		OrderBy(col, value string) *Engine
-		Asc(col string) *Engine
-		Desc(col string) *Engine
+		OrderBy(col, value string) RormEngine
+		Asc(col string) RormEngine
+		Desc(col string) RormEngine
 
-		Limit(limit int, offset ...int) *Engine
-		From(tableName string) *Engine
+		Limit(limit int, offset ...int) RormEngine
+		From(tableName string) RormEngine
 
-		SQLRaw(rawQuery string, values ...interface{}) *Engine
+		SQLRaw(rawQuery string, values ...interface{}) RormEngine
 		Get(pointerStruct interface{}) error
 
-		Insert(data interface{}) error
-		Update(data interface{}) error
-		Delete(data interface{}) error
+		Insert(data interface{}) (int64, error)
+		Update(data interface{}) (int64, error)
+		Delete(data interface{}) (int64, error)
 	}
 	// RormTransaction - Transaction Structure
 	RormTransaction struct {

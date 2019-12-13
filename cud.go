@@ -12,48 +12,102 @@ import (
 	"github.com/radityaapratamaa/rorm/lib"
 )
 
-func (re *Engine) Insert(data interface{}) error {
+func (re *Engine) Insert(data interface{}) (int64, error) {
 	defer re.clearField()
 
 	// ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	// defer cancel()
 	ctx := context.Background()
 	if err := re.PrepareData(ctx, "INSERT", data); err != nil {
-		return err
+		return 0, err
 	}
 	defer re.stmt.Close()
-	if _, err := re.ExecuteCUDQuery(ctx, re.preparedValue...); err != nil {
-		return err
-	}
-	return nil
+	return re.ExecuteCUDQuery(ctx, re.preparedValue...)
 }
 
-func (re *Engine) Update(data interface{}) error {
+func (re *Engine) Update(data interface{}) (int64, error) {
 	defer re.clearField()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := re.PrepareData(ctx, "UPDATE", data); err != nil {
-		return err
+		return 0, err
 	}
 	defer re.stmt.Close()
 	dt := re.preparedValue
-	_, err := re.ExecuteCUDQuery(ctx, dt...)
-	return err
+	return re.ExecuteCUDQuery(ctx, dt...)
 }
 
-func (re *Engine) Delete(data interface{}) error {
+func (re *Engine) Delete(data interface{}) (int64, error) {
 	defer re.clearField()
 	dVal := reflect.ValueOf(data)
 	if err := lib.CheckDataKind(dVal, false); err != nil {
-		return err
+		return 0, err
+	}
+	if valid, err := re.isSoftDelete(data); valid && err == nil {
+		return re.Cols("deleted_at").Update(data)
+	} else if err != nil {
+		return 0, err
 	}
 	command := "DELETE"
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	re.GenerateRawCUDQuery(command, data)
 	dt := re.preparedValue
-	_, err := re.ExecuteCUDQuery(ctx, dt...)
+	return re.ExecuteCUDQuery(ctx, dt...)
+}
+
+func (re *Engine) isSoftDelete(dt interface{}) (bool, error) {
+	fieldElem := reflect.ValueOf(dt).Elem()
+	for x := 0; x < fieldElem.NumField(); x++ {
+		identifierTag := fieldElem.Type().Field(x).Tag.Get("rorm")
+		if err := re.checkAndSetAutoColumn(identifierTag, fieldElem, "delete"); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (re *Engine) checkAndSetAutoColumn(identifierTag string, fieldElem reflect.Value, command string) error {
+	var err error
+	switch identifierTag {
+	case "deleted":
+		if err = re.setAutoUpdateCol(fieldElem, "DeletedAt"); (err == nil) && (command == "delete") {
+			log.Println("set deleted at")
+			return nil
+		}
+
+	case "created":
+		if err = re.setAutoUpdateCol(fieldElem, "CreatedAt"); (err == nil) && (command == "insert") {
+			log.Println("set created at")
+			return nil
+		}
+	case "updated":
+		if err = re.setAutoUpdateCol(fieldElem, "UpdatedAt"); (err == nil) && (command == "update") {
+			log.Println("set updated at")
+			return nil
+		}
+	}
 	return err
+}
+
+func (re *Engine) setAutoUpdateCol(fieldElem reflect.Value, colName string) error {
+	action := strings.ToLower(colName[:len(colName)-2])
+	field := fieldElem.FieldByName(colName)
+	if !field.IsValid() {
+		return errors.New("Struct field name must be '" + colName + "' if it has a tag rorm '" + action + "'")
+	}
+
+	if field.CanSet() && strings.Contains(field.Type().String(), "time.Time") {
+		currentTime := time.Now()
+		currTimeReflectValue := reflect.ValueOf(currentTime)
+		if field.Type().Kind() == reflect.Ptr {
+			currTimeReflectValue = reflect.ValueOf(&currentTime)
+		} else {
+			return errors.New("Field '" + colName + "' must be time.Time data type")
+		}
+		field.Set(currTimeReflectValue)
+	}
+	return nil
 }
 
 func (re *Engine) PrepareData(ctx context.Context, command string, data interface{}) error {
@@ -79,7 +133,7 @@ func (re *Engine) PrepareData(ctx context.Context, command string, data interfac
 	return nil
 }
 
-func (re *Engine) BindUpdateCol(col string, otherCols ...string) *Engine {
+func (re *Engine) Cols(col string, otherCols ...string) RormEngine {
 	re.updatedCol = make(map[string]bool)
 	re.updatedCol[col] = true
 	if otherCols != nil {
@@ -110,22 +164,11 @@ func (re *Engine) PrepareMultiInsert(ctx context.Context, data interface{}) erro
 	cols := "("
 	val := cols
 	for x := 0; x < firstVal.NumField(); x++ {
-		fieldType := firstVal.Type().Field(x)
-		fieldValue := firstVal.Field(x)
-		if !re.checkStructTag(fieldType.Tag, fieldValue) {
+		colName, valid := re.getAndValidateTag(firstVal, x)
+		if !valid {
 			continue
 		}
-		dbTag := fieldType.Tag.Get("db")
-		colName := ""
-		if dbTag != "" {
-			dbTagArr := strings.Split(dbTag, ",")
-			colName = dbTagArr[0]
-			if lib.IssetSliceKey(dbTagArr, 1) && dbTagArr[1] == "sql" && fieldValue.String() == "" {
-				continue
-			}
-		} else {
-			colName = fieldType.Name
-		}
+		fieldValue := firstVal.Field(x)
 		cols += re.syntaxQuote + colName + re.syntaxQuote + ","
 		val += "?,"
 
@@ -143,7 +186,7 @@ func (re *Engine) PrepareMultiInsert(ctx context.Context, data interface{}) erro
 		for z := 0; z < tmpVal.NumField(); z++ {
 			fieldType := tmpVal.Type().Field(z)
 			fieldValue := tmpVal.Field(z)
-			if !re.checkStructTag(fieldType.Tag, fieldValue) {
+			if _, valid := re.checkStructTag(fieldType.Tag, fieldValue); !valid {
 				continue
 			}
 			re.preparedValue = append(re.preparedValue, tmpVal.Field(z).Interface())
@@ -165,19 +208,17 @@ func (re *Engine) preparedData(command string, data interface{}) {
 	if command == "UPDATE" {
 		values = ""
 	}
+	var valid bool
 	for x := 0; x < sdValue.NumField(); x++ {
-		fieldType := sdValue.Type().Field(x)
-		tagField := fieldType.Tag
+		col := ""
+		if col, valid = re.getAndValidateTag(sdValue, x); !valid {
+			continue
+		}
 		if re.updatedCol != nil {
-			if _, exist := re.updatedCol[tagField.Get("db")]; !exist {
+			if _, exist := re.updatedCol[col]; !exist {
 				continue
 			}
 		}
-		field := sdValue.Field(x)
-		if !re.checkStructTag(tagField, field) {
-			continue
-		}
-		col := strings.Split(tagField.Get("db"), ",")[0]
 		cols += re.syntaxQuote + col + re.syntaxQuote + ","
 		if command == "INSERT" {
 			values += "?,"
